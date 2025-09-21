@@ -50,16 +50,16 @@ Di seguito sono riportate le tabelle con i risultati ottenuti confrontando l'ese
 
 **Commento**: L'accelerazione ottenuta non ha compromesso la qualità del modello. Le metriche di accuratezza sono rimaste statisticamente equivalenti in tutti i test, con fluttuazioni minime dovute alla natura stocastica dell'addestramento.
 
-##  bonus: Test su Storage Distribuito (HDFS)
+## Test su Storage Distribuito (HDFS)
 
 È stato condotto un ulteriore test per valutare l'impatto della lettura dei dati da **HDFS** invece che dal file system locale, simulando uno scenario Big Data più realistico.
 
 | Fonte Dati (4 Core)  | Tempo Medio (s) | Differenza vs Locale |
 | :------------------- | :-------------- | :------------------- |
 | File System Locale   | 789.16          | Baseline             |
-| **HDFS (Warm Avg)**  | **749.14**      | **-5.1% (più veloce)** |
+| **HDFS (Avg)**  | **675.12**      | **-14.45% (più veloce)** |
 
-**Commento**: Sorprendentemente, una volta superato il "cold start" iniziale, la lettura da HDFS è risultata in media **più veloce del 5.1%**. Questo risultato, probabilmente dovuto ai meccanismi di caching ottimizzati di Hadoop/Java, conferma la piena compatibilità e l'efficienza della soluzione in un ambiente Big Data end-to-end.
+**Commento**: La lettura da HDFS è risultata in media **più veloce del 14.45%**. Questo risultato, probabilmente dovuto ai meccanismi di caching ottimizzati di Hadoop/Java, conferma la piena compatibilità e l'efficienza della soluzione in un ambiente Big Data end-to-end.
 
 ## 💡 Conclusioni
 
