@@ -43,8 +43,8 @@ from pyspark.ml.torch.distributor import TorchDistributor
 # SEZIONE 2: CONFIGURAZIONE
 class Config:
     # --- Percorsi di I/O ---
-    DATA_DIR = "./"       # Directory sorgente per i dati di input.
-    OUTPUT_DIR = "./"     # Directory di destinazione per i risultati (modelli, grafici, etc.).
+    DATA_DIR = "./"
+    OUTPUT_DIR = "./"
 
     # --- Configurazione del Dataset ---
     STOCKS_FILE = "sp500_stocks.csv" # Nome del file contenente i dati azionari.
@@ -160,9 +160,9 @@ def train_loop_fn(config_dict):
     dei dati, l'addestramento e la validazione del modello distribuito.
     """
     # --- Inizializzazione del processo distribuito ---
-    # Ogni processo worker riceve il proprio RANK (identificativo univoco) e WORLD_SIZE (numero totale di processi)
+    # Ogni processo worker riceve il proprio RANK e WORLD_SIZE
     # da TorchDistributor attraverso le variabili d'ambiente.
-    # - RANK: Identifica univocamente ogni worker (0, 1, 2, ...)
+    # - RANK: Identificatore univoco
     # - WORLD_SIZE: Numero totale di processi worker avviati
     rank = int(os.environ["RANK"])
     world_size = int(os.environ["WORLD_SIZE"])
@@ -173,12 +173,10 @@ def train_loop_fn(config_dict):
 
     # Imposta il device (GPU se disponibile, altrimenti CPU).
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
     # Inizializzazione del gruppo di processi per la comunicazione distribuita
     # - backend="gloo": Protocollo di comunicazione ottimizzato per CPU
-    #   (usare "nccl" se si utilizzano GPU NVIDIA)
-    # - rank: Identificativo univoco del processo corrente
-    # - world_size: Numero totale di processi nel gruppo
-    # Questo è un punto di sincronizzazione: tutti i processi devono raggiungere questa linea per proseguire
+    # Punto di sincronizzazione: tutti i processi devono raggiungere questa linea per proseguire
     torch.distributed.init_process_group(backend="gloo", rank=rank, world_size=world_size)
     print(f"Worker {rank}/{world_size} - Using device: {device}")
 
@@ -204,8 +202,8 @@ def train_loop_fn(config_dict):
     test_df = data[data.index > val_end_date]
 
     # --- SCALING DELLE FEATURE ---
-    # Lo scaling è cruciale per le reti neurali: normalizza i range delle diverse 
-    # feature, aiutando il modello a convergere più velocemente e stabilmente.    scaler = MinMaxScaler(feature_range=(0, 1))
+    # Lo scaling normalizza i range delle diverse feature,
+    # aiutando il modello a convergere più velocemente e stabilmente.
     scaler = MinMaxScaler(feature_range=(0, 1))
     scaler.fit(train_df[config.FEATURES])
 
@@ -238,14 +236,14 @@ def train_loop_fn(config_dict):
 
     # --- CREAZIONE DEI DATASET E LOADER ---
     train_dataset = StockDataset(X_train, y_train)
+
     # DistributedSampler partiziona i dati in modo che ogni worker riceva un sottoinsieme diverso
-    # - num_replicas: Numero totale di processi (deve corrispondere a world_size)
-    # - rank: Identifica quale partizione dei dati deve essere gestita da questo worker
+    # - num_replicas: Numero totale di processi, corrisponde a world_size
     # Ogni epoca, i dati vengono ridistribuiti per garantire che il modello veda tutti i dati
     train_sampler = DistributedSampler(train_dataset, num_replicas=world_size, rank=rank)
     
-    # Il DataLoader utilizza il DistributedSampler per caricare solo la partizione di dati assegnata a questo worker
-    # shuffle=False perché lo shuffling è gestito dal DistributedSampler
+    # Il DataLoader utilizza DistributedSampler per caricare solo la partizione di dati assegnata a questo worker
+    # shuffle=False perché lo shuffling è gestito da DistributedSampler
     train_loader = DataLoader(train_dataset, batch_size=config.BATCH_SIZE, sampler=train_sampler)
     
     val_dataset = StockDataset(X_val, y_val)
@@ -261,10 +259,9 @@ def train_loop_fn(config_dict):
     ).to(device)
     
     # Incapsula il modello con DistributedDataParallel (DDP) per l'addestramento distribuito
-    # DDP si occupa automaticamente di:
-    # 1. Sincronizzare i gradienti tra i processi durante la backward pass
-    # 2. Ridistribuire il modello aggiornato a tutti i processi
-    # device_ids=None perché stiamo usando la CPU (per GPU, specificare gli ID delle GPU)
+    # DDP si occupa automaticamente di sincronizzare i gradienti tra i processi durante la backward pass
+    # e ridistribuire il modello aggiornato a tutti i processi
+    # device_ids=None perché viene usata la CPU
     model = nn.parallel.DistributedDataParallel(model, device_ids=None)
     criterion = nn.MSELoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=config.LEARNING_RATE)
@@ -322,6 +319,7 @@ def train_loop_fn(config_dict):
             val_losses.append(avg_val_loss)
 
             # print(f'Epoch [{epoch+1:03d}/{config.NUM_EPOCHS}], Train Loss: {avg_train_loss:.6f}, Val Loss: {avg_val_loss:.6f}')
+
             # Log ogni 10 epoche (più la prima)
             if (epoch + 1) % 10 == 0 or epoch == 0:
                 print(f"Epoch [{epoch+1:03d}/{config.NUM_EPOCHS}] - "
@@ -358,10 +356,10 @@ def train_loop_fn(config_dict):
         predictions_scaled = torch.cat(predictions_scaled).numpy()
 
         # Inversione dello scaling per riportare le predizioni e i valori reali alla scala originale.
-        # Creazione di array fittizi con la stessa struttura delle feature originali
-        # Questo è necessario perché lo scaler si aspetta lo stesso numero di colonne delle feature originali
+        # Creazione di array fittizi con la stessa struttura delle feature originali,
+        # necessario perché lo scaler si aspetta lo stesso numero di colonne delle feature originali
         dummy_array_preds = np.zeros((len(predictions_scaled), len(config.FEATURES)))
-        # Inserimento delle predizioni scalate nella colonna corretta (quella del target)
+        # Inserimento delle predizioni scalate nella colonna corretta (del target)
         dummy_array_preds[:, target_idx] = predictions_scaled.flatten()
         # Applicazione della trasformazione inversa e estrazione della colonna di interesse
         predictions_actual = scaler.inverse_transform(dummy_array_preds)[:, target_idx]
@@ -375,12 +373,11 @@ def train_loop_fn(config_dict):
         # Le metriche vengono calcolate solo sul rank 0 per evitare duplicazioni
         metrics = calculate_metrics(y_test_actual, predictions_actual)
         print("\nMetriche di Performance sul Test Set:")
+
         # Stampa formattata delle metriche di valutazione
         # Le metriche includono MSE, RMSE, MAE e MAPE
         for key, value in metrics.items(): print(f"- {key}: {value:.4f}")
-            # Nota: in un contesto distribuito, queste metriche si riferiscono solo al test set
-            # elaborato dal rank 0, che è sufficiente dato che il modello è stato addestrato
-            # su tutti i dati attraverso la distribuzione del training
+        # Queste metriche si riferiscono solo al test set elaborato dal rank 0
 
         timestamp = datetime.now().strftime('%Y%m%d_%H%M')
         model_name_tag = f"Distributed_MultiStock_{world_size}proc"
@@ -413,7 +410,6 @@ def train_loop_fn(config_dict):
         plt.close()
 
     # Rilascia le risorse del gruppo di processi distribuiti
-    # Importante per pulire le risorse di comunicazione e prevenire memory leak
     # Deve essere chiamato da tutti i processi prima della terminazione
     torch.distributed.destroy_process_group()
 
@@ -423,9 +419,9 @@ def main_distributed():
 
     print(f"Inizio esecuzione distribuita per {len(config.STOCKS_TO_ANALYZE)} azioni con {Config.NUM_PROCESSES} processi...")
 
-    # Inizializza SparkSession. 
-    # master="local[*]" usa tutti i core disponibili.
-    # local[NUM_PROCESSES] per specificare i core.
+    # Inizializza SparkSession
+    # master="local[*]" usa tutti i core disponibili
+    # local[NUM_PROCESSES] per specificare i core
     # spark.executor.cores=1 è importante per la modalità local[N] per PySpark
     spark = SparkSession.builder \
         .appName("DistributedLSTMStockPrediction") \
@@ -440,8 +436,8 @@ def main_distributed():
     # Inizializza TorchDistributor
     distributor = TorchDistributor(
         num_processes=Config.NUM_PROCESSES,
-        use_gpu=False, # Imposta a False perché non hai GPU
-        local_mode=True # Imposta a True per l'esecuzione su una singola VM
+        use_gpu=False,
+        local_mode=True # Impostata a True per l'esecuzione su una singola VM
     )
 
     # Lancia la funzione di addestramento distribuita

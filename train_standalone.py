@@ -35,8 +35,8 @@ import math
 # SEZIONE 2: CONFIGURAZIONE
 class Config:
     # --- Percorsi di I/O ---
-    DATA_DIR = "./"       # Directory sorgente per i dati di input.
-    OUTPUT_DIR = "./"     # Directory di destinazione per i risultati (modelli, grafici, etc.).
+    DATA_DIR = "./"
+    OUTPUT_DIR = "./"
 
     # --- Configurazione del Dataset ---
     STOCKS_FILE = "sp500_stocks.csv" # Nome del file contenente i dati azionari.
@@ -190,8 +190,8 @@ def main():
     test_df = data[data.index > val_end_date]
 
     # --- 2. SCALING DELLE FEATURE ---
-    # Lo scaling è cruciale per le reti neurali: normalizza i range delle diverse 
-    # feature, aiutando il modello a convergere più velocemente e stabilmente.
+    # Lo scaling normalizza i range delle diverse feature,
+    # aiutando il modello a convergere più velocemente e stabilmente.
     scaler = MinMaxScaler(feature_range=(0, 1))
     scaler.fit(train_df[config.FEATURES])
     
